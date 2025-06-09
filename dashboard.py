@@ -45,33 +45,72 @@ st.markdown("""
         border: 1px solid #2E86AB;
         margin: 1rem 0;
     }
+            .sidebar-nav {
+        padding: 0;
+        margin: 0;
+    }
+    
+    .nav-button {
+        display: block;
+        width: 100%;
+        padding: 12px 15px;
+        margin: 3px 0;
+        text-align: left;
+        background-color: transparent;
+        border: none;
+        border-radius: 5px;
+        color: #31333F;
+        font-size: 1rem;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+    
+    .nav-button:hover {
+        background-color: #e0e2e6;
+        border-left: 4px solid #2E86AB;
+    }
+    
+    .nav-button.active {
+        background-color: #e8f4f8;
+        border-left: 4px solid #2E86AB;
+        font-weight: bold;
+    }
+    
+    .sidebar .block-container {
+        padding-top: 2rem;
+    }
+    
+    /* Hide default Streamlit sidebar elements we don't need */
+    #MainMenu {visibility: hidden;}
+    header {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
 # Load and cache data
 @st.cache_data
 def load_data():
-    # You can replace this with file upload or direct CSV loading
-    # For now, I'll create sample data based on your CSV structure
-    data = {
-        'Customer ID': range(101, 451),
-        'Gender': np.random.choice(['Male', 'Female'], 350),
-        'Age': np.random.randint(25, 50, 350),
-        'City': np.random.choice(['New York', 'Los Angeles', 'Chicago', 'San Francisco', 'Miami', 'Houston'], 350),
-        'Membership Type': np.random.choice(['Gold', 'Silver', 'Bronze'], 350, p=[0.3, 0.4, 0.3]),
-        'Total Spend': np.random.normal(900, 300, 350),
-        'Items Purchased': np.random.randint(5, 25, 350),
-        'Average Rating': np.random.normal(4.0, 0.5, 350),
-        'Discount Applied': np.random.choice([True, False], 350),
-        'Days Since Last Purchase': np.random.randint(5, 65, 350),
-        'Satisfaction Level': np.random.choice(['Satisfied', 'Neutral', 'Unsatisfied'], 350, p=[0.5, 0.3, 0.2])
-    }
-    
-    df = pd.DataFrame(data)
-    df['Average Rating'] = np.clip(df['Average Rating'], 1, 5)
-    df['Total Spend'] = np.clip(df['Total Spend'], 300, 2000)
-    
-    return df
+    try:
+        # Read the CSV file
+        df = pd.read_csv('customer.csv')
+        
+        # Clean the data
+        df['Total Spend'] = pd.to_numeric(df['Total Spend'], errors='coerce')
+        df['Average Rating'] = pd.to_numeric(df['Average Rating'], errors='coerce')
+        df['Days Since Last Purchase'] = pd.to_numeric(df['Days Since Last Purchase'], errors='coerce')
+        
+        # Fill any missing values
+        df['Satisfaction Level'].fillna('Neutral', inplace=True)
+        df['Total Spend'].fillna(df['Total Spend'].mean(), inplace=True)
+        df['Average Rating'].fillna(df['Average Rating'].mean(), inplace=True)
+        df['Days Since Last Purchase'].fillna(df['Days Since Last Purchase'].mean(), inplace=True)
+        
+        # Convert boolean columns
+        df['Discount Applied'] = df['Discount Applied'].map({'TRUE': True, 'FALSE': False})
+        
+        return df
+    except Exception as e:
+        st.error(f"Error loading data: {str(e)}")
+        return None
 
 # RFM Analysis
 def perform_rfm_analysis(df):
@@ -159,13 +198,45 @@ def main():
     # Load data
     df = load_data()
     
-    # Sidebar
+    # Sidebar Navigation
     st.sidebar.title("📊 Dashboard Navigation")
-    page = st.sidebar.selectbox(
-        "Choose Analysis Type",
-        ["Overview", "Customer Segmentation (RFM)", "Churn Analysis", "Customer Insights", "Strategic Recommendations"]
-    )
     
+    # Replace custom buttons with radio
+    page = st.sidebar.radio(
+        label="",
+        options=["Overview", "Customer Segmentation (RFM)", "Churn Analysis", 
+                "Customer Insights", "Strategic Recommendations"],
+        format_func=lambda x: {
+            "Overview": "📈 Overview",
+            "Customer Segmentation (RFM)": "🎯 Customer Segmentation (RFM)",
+            "Churn Analysis": "⚠️ Churn Analysis",
+            "Customer Insights": "🔍 Customer Insights",
+            "Strategic Recommendations": "💡 Strategic Recommendations"
+        }[x]
+    )
+
+    # Add styling to radio buttons
+    st.markdown("""
+        <style>
+        div.row-widget.stRadio > div[role="radiogroup"] > label {
+            background-color: #f0f2f6;
+            padding: 10px 15px;
+            margin: 4px 0;
+            border-radius: 5px;
+            width: 100%;
+            transition: background-color 0.3s, border-left 0.3s;
+        }
+        div.row-widget.stRadio > div[role="radiogroup"] > label:hover {
+            background-color: #e0e2e6;
+            border-left: 4px solid #2E86AB;
+        }
+        div.row-widget.stRadio > div[role="radiogroup"] > label[data-baseweb="radio"] > div:first-child {
+            background-color: #2E86AB;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    # Content based on selected page
     if page == "Overview":
         st.header("📈 Business Overview")
         
