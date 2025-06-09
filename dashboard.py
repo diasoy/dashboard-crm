@@ -53,104 +53,10 @@ st.markdown("""
 def load_data():
     # You can replace this with file upload or direct CSV loading
     # For now, I'll create sample data based on your CSV structure
-    data = {
-        'Customer ID': range(101, 451),
-        'Gender': np.random.choice(['Male', 'Female'], 350),
-        'Age': np.random.randint(25, 50, 350),
-        'City': np.random.choice(['New York', 'Los Angeles', 'Chicago', 'San Francisco', 'Miami', 'Houston'], 350),
-        'Membership Type': np.random.choice(['Gold', 'Silver', 'Bronze'], 350, p=[0.3, 0.4, 0.3]),
-        'Total Spend': np.random.normal(900, 300, 350),
-        'Items Purchased': np.random.randint(5, 25, 350),
-        'Average Rating': np.random.normal(4.0, 0.5, 350),
-        'Discount Applied': np.random.choice([True, False], 350),
-        'Days Since Last Purchase': np.random.randint(5, 65, 350),
-        'Satisfaction Level': np.random.choice(['Satisfied', 'Neutral', 'Unsatisfied'], 350, p=[0.5, 0.3, 0.2])
-    }
-    
-    df = pd.DataFrame(data)
-    df['Average Rating'] = np.clip(df['Average Rating'], 1, 5)
-    df['Total Spend'] = np.clip(df['Total Spend'], 300, 2000)
-    
+    df = pd.read_csv('customer.csv')   
+    df.dropna(inplace=True)
+
     return df
-
-# RFM Analysis
-def perform_rfm_analysis(df):
-    # Calculate RFM metrics
-    current_date = df['Days Since Last Purchase'].min()
-    
-    rfm = df.groupby('Customer ID').agg({
-        'Days Since Last Purchase': lambda x: current_date - x.iloc[0],  # Recency (lower is better)
-        'Items Purchased': 'sum',  # Frequency
-        'Total Spend': 'sum'  # Monetary
-    }).reset_index()
-    
-    rfm.columns = ['Customer ID', 'Recency', 'Frequency', 'Monetary']
-    rfm['Recency'] = -rfm['Recency']  # Make recency positive (lower days = higher recency score)
-    
-    # Calculate RFM scores
-    rfm['R_Score'] = pd.qcut(rfm['Recency'], 5, labels=[1,2,3,4,5])
-    rfm['F_Score'] = pd.qcut(rfm['Frequency'].rank(method="first"), 5, labels=[1,2,3,4,5])
-    rfm['M_Score'] = pd.qcut(rfm['Monetary'], 5, labels=[1,2,3,4,5])
-    
-    # Combine RFM scores
-    rfm['RFM_Score'] = rfm['R_Score'].astype(str) + rfm['F_Score'].astype(str) + rfm['M_Score'].astype(str)
-    
-    # Define customer segments
-    def segment_customers(row):
-        if row['RFM_Score'] in ['555', '554', '544', '545', '454', '455', '445']:
-            return 'Champions'
-        elif row['RFM_Score'] in ['543', '444', '435', '355', '354', '345', '344', '335']:
-            return 'Loyal Customers'
-        elif row['RFM_Score'] in ['512', '511', '422', '421', '412', '411', '311']:
-            return 'Potential Loyalists'
-        elif row['RFM_Score'] in ['533', '532', '531', '523', '522', '521', '515', '514']:
-            return 'New Customers'
-        elif row['RFM_Score'] in ['155', '154', '144', '214', '215', '115', '114']:
-            return 'At Risk'
-        elif row['RFM_Score'] in ['255', '254', '245', '244', '253', '252', '243', '242']:
-            return 'Cannot Lose Them'
-        elif row['RFM_Score'] in ['155', '154', '144', '214', '215', '115']:
-            return 'Hibernating'
-        else:
-            return 'Others'
-    
-    rfm['Segment'] = rfm.apply(segment_customers, axis=1)
-    
-    return rfm
-
-# Churn Prediction Model
-def build_churn_model(df):
-    # Prepare features for churn prediction
-    features = ['Age', 'Total Spend', 'Items Purchased', 'Average Rating', 'Days Since Last Purchase']
-    
-    # Create binary target (churn if unsatisfied or high days since last purchase)
-    df['Churn'] = ((df['Satisfaction Level'] == 'Unsatisfied') | 
-                   (df['Days Since Last Purchase'] > 45)).astype(int)
-    
-    # Prepare feature matrix
-    X = df[features].copy()
-    y = df['Churn']
-    
-    # Handle categorical variables
-    X_encoded = pd.get_dummies(X, drop_first=True)
-    
-    # Split data
-    X_train, X_test, y_train, y_test = train_test_split(X_encoded, y, test_size=0.2, random_state=42)
-    
-    # Train model
-    model = RandomForestClassifier(n_estimators=100, random_state=42)
-    model.fit(X_train, y_train)
-    
-    # Predictions
-    y_pred = model.predict(X_test)
-    
-    # Feature importance
-    feature_importance = pd.DataFrame({
-        'Feature': X_encoded.columns,
-        'Importance': model.feature_importances_
-    }).sort_values('Importance', ascending=False)
-    
-    return model, feature_importance, y_test, y_pred
 
 # Main Dashboard
 def main():
@@ -160,10 +66,9 @@ def main():
     df = load_data()
     
     # Sidebar
-    st.sidebar.title("📊 Dashboard Navigation")
-    page = st.sidebar.selectbox(
-        "Choose Analysis Type",
-        ["Overview", "Customer Segmentation (RFM)", "Churn Analysis", "Customer Insights", "Strategic Recommendations"]
+    page = st.sidebar.radio(
+    "📊 Dashboard Navigation",
+    ["Overview", "Customer Insights", "Customer Segmentation (RFM)","Customer Segmentation (K-Means)","Churn Analysis", "Strategic Recommendations"]
     )
     
     if page == "Overview":
@@ -172,22 +77,18 @@ def main():
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            st.markdown('<div class="metric-card">', unsafe_allow_html=True)
             st.metric("Total Customers", f"{len(df):,}")
             st.markdown('</div>', unsafe_allow_html=True)
         
         with col2:
-            st.markdown('<div class="metric-card">', unsafe_allow_html=True)
             st.metric("Total Revenue", f"${df['Total Spend'].sum():,.2f}")
             st.markdown('</div>', unsafe_allow_html=True)
         
         with col3:
-            st.markdown('<div class="metric-card">', unsafe_allow_html=True)
             st.metric("Avg Order Value", f"${df['Total Spend'].mean():.2f}")
             st.markdown('</div>', unsafe_allow_html=True)
         
         with col4:
-            st.markdown('<div class="metric-card">', unsafe_allow_html=True)
             satisfaction_rate = (df['Satisfaction Level'] == 'Satisfied').mean() * 100
             st.metric("Satisfaction Rate", f"{satisfaction_rate:.1f}%")
             st.markdown('</div>', unsafe_allow_html=True)
@@ -197,14 +98,44 @@ def main():
         col1, col2 = st.columns(2)
         
         with col1:
-            # Revenue by Membership Type
-            revenue_by_membership = df.groupby('Membership Type')['Total Spend'].sum().reset_index()
-            fig1 = px.pie(revenue_by_membership, values='Total Spend', names='Membership Type',
-                         title="Revenue Distribution by Membership Type",
-                         color_discrete_sequence=['#FFD700', '#C0C0C0', '#CD7F32'])
+            # RFM Analyis segmentation
+            rfm_data = perform_rfm_analysis(df)
+            df_rfm = df.merge(rfm_data[['Customer ID', 'RFM_Segment']], on='Customer ID', how='left')
+            segment_counts = rfm_data['RFM_Segment'].value_counts()
+            fig1 = px.pie(values=segment_counts.values, names=segment_counts.index,
+                         title="Customer RFM Segmentation")
             st.plotly_chart(fig1, use_container_width=True)
         
         with col2:
+            # Churn Analysis Overview
+            df['Churn_Risk'] = ((df['Satisfaction Level'] == 'Unsatisfied') | 
+                            (df['Days Since Last Purchase'] > 45))
+            high_risk = df[df['Churn_Risk'] == True].sort_values('Total Spend', ascending=False)
+            if len(high_risk) > 0:
+                st.write(f"**{len(high_risk)} customers** are at high risk of churning")
+                st.write(f"**Potential Revenue Loss:** ${high_risk['Total Spend'].sum():.2f}")
+
+            # Churn rate by segment
+            churn_rate = df.groupby('Satisfaction Level').apply(
+                lambda x: ((x['Days Since Last Purchase'] > 45) | 
+                          (x['Satisfaction Level'] == 'Unsatisfied')).mean() * 100
+            ).reset_index()
+            churn_rate.columns = ['Satisfaction Level', 'Churn Rate (%)']
+            
+            fig1 = px.bar(churn_rate, x='Satisfaction Level', y='Churn Rate (%)',
+                         title="Churn Rate by Satisfaction Level",
+                         color='Churn Rate (%)',
+                         color_continuous_scale='Reds')
+            st.plotly_chart(fig1, use_container_width=True)
+            
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Revenue by Membership Type
+            membership_vs_spend = df.groupby('Membership Type')['Total Spend'].mean()
+            fig1 = px.bar(x=membership_vs_spend.index, y=membership_vs_spend.values, labels={'x':'Membership Type', 'y':'Average Spend'}, title='Average Spending by Membership Type')
+            st.plotly_chart(fig1, use_container_width=True)
+
             # Customer Satisfaction by City
             satisfaction_by_city = df.groupby(['City', 'Satisfaction Level']).size().unstack(fill_value=0)
             fig2 = px.bar(satisfaction_by_city.reset_index(), x='City', 
@@ -212,7 +143,164 @@ def main():
                          title="Customer Satisfaction by City",
                          color_discrete_sequence=['#2E86AB', '#A23B72', '#F18F01'])
             st.plotly_chart(fig2, use_container_width=True)
-    
+        
+        with col2:
+            # Average Spending with/without Discounts
+            discount_vs_spend = df.groupby('Discount Applied')['Total Spend'].mean()
+            fig1 = px.bar(x=discount_vs_spend.index, y=discount_vs_spend.values, labels={'x':'Discount Applied', 'y':'Average Spend'}, title='Average Spending with/without Discounts')
+            st.plotly_chart(fig1, use_container_width=True)
+
+            # Average item purchased and Spending
+            items_vs_spend = df.groupby('Items Purchased')['Total Spend'].mean()
+            fig2 = px.bar(x=items_vs_spend.index, y=items_vs_spend.values, labels={'x':'Items Purchased', 'y':'Average Spend'}, title='Average Spending by Number of Items Purchased')
+            st.plotly_chart(fig2, use_container_width=True)
+
+    elif page == "Customer Insights":
+        st.header("🔍 Customer Insights & Behavior Analysis")
+        
+        tab1, tab2, tab3 = st.tabs(["Demographics", "Purchase Behavior", "Satisfaction Analysis"])
+        
+        with tab1:
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Age distribution
+                fig1 = px.histogram(df, x='Age', nbins=20, title="Age Distribution",
+                                   color_discrete_sequence=['#2E86AB'])
+                st.plotly_chart(fig1, use_container_width=True)
+                
+                # Gender distribution
+                gender_counts = df['Gender'].value_counts()
+                fig3 = px.pie(values=gender_counts.values, names=gender_counts.index,
+                             title="Gender Distribution")
+                st.plotly_chart(fig3, use_container_width=True)
+
+                # City distribution
+                city_counts = df['City'].value_counts()
+                fig3 = px.bar(x=city_counts.values, y=city_counts.index,
+                             title="Customers by City", orientation='h',
+                             color=city_counts.values,
+                             color_continuous_scale='Blues')
+                st.plotly_chart(fig3, use_container_width=True)
+            
+            with col2:
+                #Age Group Distribution
+                age_groups = pd.cut(df['Age'], bins=[0, 18, 30, 45, 60, 100], labels=['0-18', '19-30', '31-45', '46-60', '60+'])
+                df['Age Group'] = age_groups
+                fig2 = px.histogram(df, x='Age Group', title='Age Group Distribution')
+                st.plotly_chart(fig2, use_container_width=True)
+
+                # Age and Gender Distribution
+                gender_with_age = df.groupby('Gender')['Age'].value_counts().reset_index()
+                fig = px.bar(gender_with_age, x='Age', y='count', color='Gender', barmode='group', title='Gender and Age Distribution')
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # Membership distribution
+                membership_counts = df['Membership Type'].value_counts()
+                fig4 = px.bar(x=membership_counts.index, y=membership_counts.values,
+                             title="Membership Type Distribution",
+                             color=['Gold', 'Silver', 'Bronze'],
+                             color_discrete_map={'Gold': '#FFD700', 'Silver': '#C0C0C0', 'Bronze': '#CD7F32'})
+                st.plotly_chart(fig4, use_container_width=True)
+        
+        with tab2:
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Total Spend Distribution
+                fig = px.histogram(df, x='Total Spend', title='Total Spend Distribution')
+                st.plotly_chart(fig, use_container_width=True)
+
+                # Days since last purchase distribution
+                fig2 = px.histogram(df, x='Days Since Last Purchase', nbins=20,
+                                   title="Days Since Last Purchase Distribution",
+                                   color_discrete_sequence=['#F18F01'])
+                st.plotly_chart(fig2, use_container_width=True)
+
+                # Discount Applied Distribution
+                fig = px.pie(df, names='Discount Applied', title='Discount Applied Distribution')
+                st.plotly_chart(fig, use_container_width=True)
+
+                # Spending vs Gender
+                spending_by_gender = df.groupby('Gender')['Total Spend'].mean()
+                fig = px.bar(x=spending_by_gender.index, y=spending_by_gender.values, labels={'x':'Gender', 'y':'Average Spend'}, title='Average Spending by Gender')
+                st.plotly_chart(fig, use_container_width=True)
+
+                # Spending vs Age
+                age_vs_spend = df.groupby('Age')['Total Spend'].mean()
+                fig = px.bar(x=age_vs_spend.index, y=age_vs_spend.values, labels={'x':'Age', 'y':'Average Spend'}, title='Average Spending by Age Group')
+                st.plotly_chart(fig, use_container_width=True)
+
+                # Days Since Last Purchase vs Spending
+                days_vs_spend = df.groupby('Days Since Last Purchase')['Total Spend'].mean()
+                fig = px.bar(x=days_vs_spend.index, y=days_vs_spend.values, labels={'x':'Days Since Last Purchase', 'y':'Average Spend'}, title='Average Spending by Days Since Last Purchase')
+                st.plotly_chart(fig, use_container_width=True)
+
+                # Spending vs Items correlation
+                fig1 = px.scatter(df, x='Items Purchased', y='Total Spend',
+                                 color='Membership Type', size='Average Rating',
+                                 title="Spending vs Items Purchased",
+                                 color_discrete_map={'Gold': '#FFD700', 'Silver': '#C0C0C0', 'Bronze': '#CD7F32'})
+                st.plotly_chart(fig1, use_container_width=True)
+                
+            
+            with col2:
+                # Item Purchased Distribution
+                fig = px.histogram(df, x='Items Purchased', title='Items Purchased Distribution')
+                st.plotly_chart(fig, use_container_width=True)
+
+                # Rating distribution
+                fig4 = px.histogram(df, x='Average Rating', nbins=20,
+                                   title="Customer Rating Distribution",
+                                   color_discrete_sequence=['#A23B72'])
+                st.plotly_chart(fig4, use_container_width=True)
+
+                # Spending, Membership, and Gender
+                fig = px.box(df, x='Membership Type', y='Total Spend', color='Gender', title='Spending by Membership Type and Gender')
+                st.plotly_chart(fig, use_container_width=True) 
+
+                # City, Item purchased, membership Type
+                fig = px.box(df, x='City', y='Items Purchased', color='Membership Type', title='Spending by Membership Type and City')
+                st.plotly_chart(fig, use_container_width=True)
+
+                # Average Spending by Discount Applied
+                discount_vs_spend = df.groupby('Discount Applied')['Total Spend'].mean()
+                fig = px.bar(x=discount_vs_spend.index, y=discount_vs_spend.values, labels={'x':'Discount Applied', 'y':'Average Spend'}, title='Average Spending with/without Discounts')
+                st.plotly_chart(fig, use_container_width=True)  
+
+                # Membership vs Discount vs Total Spend
+                df_grouped = df.groupby(['Membership Type', 'Discount Applied'])['Total Spend'].sum().unstack()
+                fig = px.bar(df_grouped, barmode='group', title='Total Spend by Membership Type and Discount Applied')              
+                st.plotly_chart(fig, use_container_width=True) 
+
+                # Average spending by membership
+                avg_spending = df.groupby('Membership Type')['Total Spend'].mean().reset_index()
+                fig3 = px.bar(avg_spending, x='Membership Type', y='Total Spend',
+                             title="Average Spending by Membership Type",
+                             color='Membership Type',
+                             color_discrete_map={'Gold': '#FFD700', 'Silver': '#C0C0C0', 'Bronze': '#CD7F32'})
+                st.plotly_chart(fig3, use_container_width=True)
+                        
+        with tab3:
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Satisfaction by membership
+                satisfaction_membership = pd.crosstab(df['Membership Type'], df['Satisfaction Level'], normalize='index') * 100
+                fig1 = px.bar(satisfaction_membership.reset_index(), 
+                             x='Membership Type', y=['Satisfied', 'Neutral', 'Unsatisfied'],
+                             title="Satisfaction Rate by Membership Type (%)",
+                             color_discrete_sequence=['#2E86AB', '#A23B72', '#F18F01'])
+                st.plotly_chart(fig1, use_container_width=True)
+            
+            with col2:
+                # Rating vs Satisfaction correlation
+                fig2 = px.box(df, x='Satisfaction Level', y='Average Rating',
+                             title="Rating Distribution by Satisfaction Level",
+                             color='Satisfaction Level',
+                             color_discrete_sequence=['#2E86AB', '#A23B72', '#F18F01'])
+                st.plotly_chart(fig2, use_container_width=True)
+
     elif page == "Customer Segmentation (RFM)":
         st.header("🎯 Customer Segmentation (RFM Analysis)")
         
@@ -220,20 +308,20 @@ def main():
         rfm_data = perform_rfm_analysis(df)
         
         # Merge with original data for complete view
-        df_rfm = df.merge(rfm_data[['Customer ID', 'Segment']], on='Customer ID', how='left')
+        df_rfm = df.merge(rfm_data[['Customer ID', 'RFM_Segment']], on='Customer ID', how='left')
         
         col1, col2 = st.columns(2)
         
         with col1:
             # Segment distribution
-            segment_counts = rfm_data['Segment'].value_counts()
+            segment_counts = rfm_data['RFM_Segment'].value_counts()
             fig1 = px.pie(values=segment_counts.values, names=segment_counts.index,
                          title="Customer Segment Distribution")
             st.plotly_chart(fig1, use_container_width=True)
         
         with col2:
             # Revenue by segment
-            revenue_by_segment = df_rfm.groupby('Segment')['Total Spend'].sum().sort_values(ascending=False)
+            revenue_by_segment = df_rfm.groupby('RFM_Segment')['Total Spend'].sum().sort_values(ascending=False)
             fig2 = px.bar(x=revenue_by_segment.index, y=revenue_by_segment.values,
                          title="Revenue by Customer Segment",
                          color=revenue_by_segment.values,
@@ -244,7 +332,7 @@ def main():
         # Detailed segment analysis
         st.subheader("📊 Segment Analysis")
         
-        segment_summary = df_rfm.groupby('Segment').agg({
+        segment_summary = df_rfm.groupby('RFM_Segment').agg({
             'Customer ID': 'count',
             'Total Spend': ['mean', 'sum'],
             'Items Purchased': 'mean',
@@ -258,17 +346,14 @@ def main():
         st.dataframe(segment_summary, use_container_width=True)
         
         # Strategic insights for each segment
-        st.markdown('<div class="insight-box">', unsafe_allow_html=True)
         st.subheader("💡 Strategic Insights by Segment")
         
         insights = {
-            'Champions': 'High-value customers who buy frequently. Focus on retention and upselling premium products.',
-            'Loyal Customers': 'Regular customers with good spending. Reward their loyalty with exclusive offers.',
-            'Potential Loyalists': 'Recent customers with potential. Nurture them with targeted campaigns.',
-            'New Customers': 'Recent acquisitions. Focus on onboarding and first-purchase experience.',
-            'At Risk': 'Valuable customers who haven\'t purchased recently. Re-engagement campaigns needed.',
-            'Cannot Lose Them': 'High-value customers at risk. Immediate personalized intervention required.',
-            'Others': 'Mixed segment requiring individual analysis and targeted approaches.'
+            'Top Customers': 'Top-tier customers with high loyalty and recent engagement. Offer VIP access, exclusive deals. Prioritize customer service, retention and personalized upselling.',
+            'High Value Customers (Loyal)': 'Consistent spenders demonstrating loyalty. Keep them engaged with exclusive rewards and tailored offers.',
+            'Medium Value Customers (Need Attention)': 'Recent customers showing promising behavior. Nurture them to become champions through targeted campaigns.',
+            'Low Value Customers (At Risk)': 'Customers with declining activity or recent disengagement. Re-engagement campaigns are necessary to win them back.',
+            'Hibernating': 'High-value customers showing signs of risk. Immediate personalized retention strategies required.',
         }
         
         for segment, insight in insights.items():
@@ -277,6 +362,45 @@ def main():
         
         st.markdown('</div>', unsafe_allow_html=True)
     
+    elif page == "Customer Segmentation (K-Means)":
+        st.header("🎯 Customer Segmentation (K-Means Segementation)")
+        
+        # Perform RFM analysis
+        cluster_data = k_means_clustering(df)
+        
+        # Merge with original data for complete view
+        df_cluster = df.merge(cluster_data[['Customer ID', 'Cluster1', 'EngagementCluster', 'SeasonalCluster']], on='Customer ID', how='left')
+    
+        tab1, tab2, tab3 = st.tabs(["Total Spend, Age, And Item Purchased", "Engagement-Based Clustering", "Seasonal Clustering"])
+        
+        with tab1:
+            st.subheader('Segmentation Based on Total Spend, Age, And Item Purchased')
+
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                fig = px.box(df, x='Cluster1', y='Total Spend', title='Total Spend by Cluster')
+                st.plotly_chart(fig, use_container_width=True)
+            
+            with col2:
+                cluster_distribution = df['Cluster1'].value_counts().sort_index()
+                fig = px.bar(cluster_distribution, x=cluster_distribution.index, y=cluster_distribution.values, labels={'x':'Cluster', 'y':'Count'}, title='Cluster Distribution')
+                st.plotly_chart(fig, use_container_width=True)
+
+        with tab2:
+            st.subheader('Segmentation Based on Engagement')
+
+            cluster_distribution = df['EngagementCluster'].value_counts().sort_index()
+            fig = px.bar(cluster_distribution, x=cluster_distribution.index, y=cluster_distribution.values, labels={'x':'Cluster', 'y':'Count'}, title='Engagement Cluster Distribution')
+            st.plotly_chart(fig, use_container_width=True)
+            
+        with tab3:
+            st.subheader('Segmentation Based on TSeasonal')
+
+            cluster_distribution = df['SeasonalCluster'].value_counts().sort_index()
+            fig = px.bar(cluster_distribution, x=cluster_distribution.index, y=cluster_distribution.values, labels={'x':'Cluster', 'y':'Count'}, title='Seasonal Cluster Distribution')
+            st.plotly_chart(fig, use_container_width=True)
+            
     elif page == "Churn Analysis":
         st.header("⚠️ Customer Churn Analysis")
         
@@ -328,7 +452,6 @@ def main():
             st.dataframe(risk_customers, use_container_width=True)
         
         # Retention strategies
-        st.markdown('<div class="insight-box">', unsafe_allow_html=True)
         st.subheader("🛡️ Retention Strategies")
         st.write("""
         **Immediate Actions:**
@@ -342,102 +465,13 @@ def main():
         - Create targeted content for different customer segments
         """)
         st.markdown('</div>', unsafe_allow_html=True)
-    
-    elif page == "Customer Insights":
-        st.header("🔍 Customer Insights & Behavior Analysis")
-        
-        tab1, tab2, tab3 = st.tabs(["Demographics", "Purchase Behavior", "Satisfaction Analysis"])
-        
-        with tab1:
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                # Age distribution
-                fig1 = px.histogram(df, x='Age', nbins=20, title="Age Distribution",
-                                   color_discrete_sequence=['#2E86AB'])
-                st.plotly_chart(fig1, use_container_width=True)
-                
-                # Gender distribution
-                gender_counts = df['Gender'].value_counts()
-                fig2 = px.pie(values=gender_counts.values, names=gender_counts.index,
-                             title="Gender Distribution")
-                st.plotly_chart(fig2, use_container_width=True)
-            
-            with col2:
-                # City distribution
-                city_counts = df['City'].value_counts()
-                fig3 = px.bar(x=city_counts.values, y=city_counts.index,
-                             title="Customers by City", orientation='h',
-                             color=city_counts.values,
-                             color_continuous_scale='Blues')
-                st.plotly_chart(fig3, use_container_width=True)
-                
-                # Membership distribution
-                membership_counts = df['Membership Type'].value_counts()
-                fig4 = px.bar(x=membership_counts.index, y=membership_counts.values,
-                             title="Membership Type Distribution",
-                             color=['Gold', 'Silver', 'Bronze'],
-                             color_discrete_map={'Gold': '#FFD700', 'Silver': '#C0C0C0', 'Bronze': '#CD7F32'})
-                st.plotly_chart(fig4, use_container_width=True)
-        
-        with tab2:
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                # Spending vs Items correlation
-                fig1 = px.scatter(df, x='Items Purchased', y='Total Spend',
-                                 color='Membership Type', size='Average Rating',
-                                 title="Spending vs Items Purchased",
-                                 color_discrete_map={'Gold': '#FFD700', 'Silver': '#C0C0C0', 'Bronze': '#CD7F32'})
-                st.plotly_chart(fig1, use_container_width=True)
-                
-                # Days since last purchase distribution
-                fig2 = px.histogram(df, x='Days Since Last Purchase', nbins=20,
-                                   title="Days Since Last Purchase Distribution",
-                                   color_discrete_sequence=['#F18F01'])
-                st.plotly_chart(fig2, use_container_width=True)
-            
-            with col2:
-                # Average spending by membership
-                avg_spending = df.groupby('Membership Type')['Total Spend'].mean().reset_index()
-                fig3 = px.bar(avg_spending, x='Membership Type', y='Total Spend',
-                             title="Average Spending by Membership Type",
-                             color='Membership Type',
-                             color_discrete_map={'Gold': '#FFD700', 'Silver': '#C0C0C0', 'Bronze': '#CD7F32'})
-                st.plotly_chart(fig3, use_container_width=True)
-                
-                # Rating distribution
-                fig4 = px.histogram(df, x='Average Rating', nbins=20,
-                                   title="Customer Rating Distribution",
-                                   color_discrete_sequence=['#A23B72'])
-                st.plotly_chart(fig4, use_container_width=True)
-        
-        with tab3:
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                # Satisfaction by membership
-                satisfaction_membership = pd.crosstab(df['Membership Type'], df['Satisfaction Level'], normalize='index') * 100
-                fig1 = px.bar(satisfaction_membership.reset_index(), 
-                             x='Membership Type', y=['Satisfied', 'Neutral', 'Unsatisfied'],
-                             title="Satisfaction Rate by Membership Type (%)",
-                             color_discrete_sequence=['#2E86AB', '#A23B72', '#F18F01'])
-                st.plotly_chart(fig1, use_container_width=True)
-            
-            with col2:
-                # Rating vs Satisfaction correlation
-                fig2 = px.box(df, x='Satisfaction Level', y='Average Rating',
-                             title="Rating Distribution by Satisfaction Level",
-                             color='Satisfaction Level',
-                             color_discrete_sequence=['#2E86AB', '#A23B72', '#F18F01'])
-                st.plotly_chart(fig2, use_container_width=True)
-    
+
     elif page == "Strategic Recommendations":
         st.header("💡 Strategic CRM Recommendations")
         
         # Calculate key metrics for recommendations
         rfm_data = perform_rfm_analysis(df)
-        df_rfm = df.merge(rfm_data[['Customer ID', 'Segment']], on='Customer ID', how='left')
+        df_rfm = df.merge(rfm_data[['Customer ID', 'RFM_Segment']], on='Customer ID', how='left')
         
         churn_rate = ((df['Satisfaction Level'] == 'Unsatisfied') | 
                      (df['Days Since Last Purchase'] > 45)).mean() * 100
@@ -565,6 +599,115 @@ def main():
                            color='Strategy', title="6-Month Implementation Roadmap",
                            color_discrete_sequence=['#2E86AB', '#A23B72', '#F18F01', '#6A994E'])
         st.plotly_chart(fig_roadmap, use_container_width=True)
+
+# RFM Analysis
+def perform_rfm_analysis(df):
+    # Calculate RFM metrics
+    current_date = df['Days Since Last Purchase'].min()
+
+    rfm_table = df.groupby('Customer ID').agg({
+            'Days Since Last Purchase': lambda x: current_date - x.iloc[0],  # Recency (lower is better)
+            'Items Purchased': 'sum',  # Frequency
+            'Total Spend': 'sum'  # Monetary
+        }).reset_index()
+    rfm_table.columns = ['Customer ID', 'Recency', 'Frequency', 'Monetary']
+    rfm_table['Recency'] = -rfm_table['Recency']  # Make recency positive (lower days = higher recency score)
+    
+    # Rank RFM
+    rfm_table['R_Rank'] = rfm_table['Recency'].rank(ascending=False)
+    rfm_table['F_Rank'] = rfm_table['Frequency'].rank(ascending=True)
+    rfm_table['M_Rank'] = rfm_table['Monetary'].rank(ascending=True)
+    rfm_table.head()
+
+    # Normalize RFM
+    rfm_table['R_rank_norm'] = (rfm_table['R_Rank'] / rfm_table['R_Rank'].max()) * 100
+    rfm_table['F_rank_norm'] = (rfm_table['F_Rank'] / rfm_table['F_Rank'].max()) * 100
+    rfm_table['M_rank_norm'] = (rfm_table['M_Rank'] / rfm_table['M_Rank'].max()) * 100
+
+    # Drop individual rank
+    rfm_table.drop(columns=['R_Rank', 'F_Rank', 'M_Rank'], inplace=True)
+    rfm_table.head()
+
+    # RFM Scoring digunakan metode weighted dengan 55% Monetary, 30% Frequency, dan 15% Recency
+    rfm_table['RFM_Score'] = 0.15 * rfm_table['R_rank_norm'] + 0.3 * rfm_table['F_rank_norm'] + 0.55 * rfm_table['M_rank_norm']
+    rfm_table['RFM_Score'] *= 0.05
+    rfm_table = rfm_table.round(2)
+    
+    # Segmentasi Customer berdasarkan RFM
+    rfm_table['RFM_Segment'] = pd.cut(
+        rfm_table['RFM_Score'],
+        bins=[0, 1.6, 3, 4, 4.5, 5],
+        labels=['Hibernating',
+                'Low Value Customers (At Risk)',
+                'Medium Value Customers (Need Attention)',
+                'High Value Customers (Loyal)',
+                'Top Customers'
+                ])
+        
+    return rfm_table
+
+def k_means_clustering(df):
+    X = df[['Total Spend', 'Age', 'Items Purchased']]
+
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+    k = 2
+    kmeans = KMeans(n_clusters=k, random_state=42)
+    df['Cluster1'] = kmeans.fit_predict(X_scaled)
+
+    X_engagement = df[['Days Since Last Purchase', 'Average Rating', 'Discount Applied']]
+    scaler_engagement = StandardScaler()
+    X_engagement_scaled = scaler_engagement.fit_transform(X_engagement)
+
+    k_engagement = 4
+
+    kmeans_engagement = KMeans(n_clusters=k_engagement, random_state=42)
+    df['EngagementCluster'] = kmeans_engagement.fit_predict(X_engagement_scaled)
+
+    X_seasonal = df[['Days Since Last Purchase', 'Total Spend']]
+    scaler_seasonal = StandardScaler()
+    X_seasonal_scaled = scaler_seasonal.fit_transform(X_seasonal)
+
+    k_seasonal = 5
+
+    kmeans_seasonal = KMeans(n_clusters=k_seasonal, random_state=42)
+    df['SeasonalCluster'] = kmeans_seasonal.fit_predict(X_seasonal_scaled)
+
+    return df
+
+# Churn Prediction Model
+def build_churn_model(df):
+    # Prepare features for churn prediction
+    features = ['Age', 'Total Spend', 'Items Purchased', 'Average Rating', 'Days Since Last Purchase']
+    
+    # Create binary target (churn if unsatisfied or high days since last purchase)
+    df['Churn'] = ((df['Satisfaction Level'] == 'Unsatisfied') | 
+                   (df['Days Since Last Purchase'] > 45)).astype(int)
+    
+    # Prepare feature matrix
+    X = df[features].copy()
+    y = df['Churn']
+    
+    # Handle categorical variables
+    X_encoded = pd.get_dummies(X, drop_first=True)
+    
+    # Split data
+    X_train, X_test, y_train, y_test = train_test_split(X_encoded, y, test_size=0.2, random_state=42)
+    
+    # Train model
+    model = RandomForestClassifier(n_estimators=100, random_state=42)
+    model.fit(X_train, y_train)
+    
+    # Predictions
+    y_pred = model.predict(X_test)
+    
+    # Feature importance
+    feature_importance = pd.DataFrame({
+        'Feature': X_encoded.columns,
+        'Importance': model.feature_importances_
+    }).sort_values('Importance', ascending=False)
+    
+    return model, feature_importance, y_test, y_pred
 
 if __name__ == "__main__":
     main()
